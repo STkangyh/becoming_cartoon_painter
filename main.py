@@ -1,12 +1,85 @@
 import cv2 as cv
 import numpy as np
 
+def analyze_image(img):
+    """
+    이미지 특성을 분석해서 각 파라미터의 추천 초기값을 반환합니다.
+    """
+    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    h, w  = img.shape[:2]
+    mean  = float(np.mean(gray))
+    std   = float(np.std(gray))
+    mpx   = (h * w) / 1_000_000
+
+    # ── center (샤프닝 중앙값) ──────────────────────────────
+    # 대비가 낮으면 샤프닝을 강하게(center 크게), 높으면 약하게
+    if std < 40:
+        center = 9.5   # 대비 낮음 → 더 강한 샤프닝
+    elif std < 70:
+        center = 9.0   # 보통 (최종값 반영)
+    else:
+        center = 9.0   # 대비 높음
+
+    # ── neighbor (엣지 강조) ───────────────────────────────
+    # 해상도가 높을수록 세밀한 엣지가 많으므로 약하게
+    if mpx > 4:
+        neighbor = 1.8
+    elif mpx > 1:
+        neighbor = 2.2
+    else:
+        neighbor = 2.0   # 최종값 반영
+
+    # ── edge thickness ─────────────────────────────────────
+    # 해상도가 높을수록 선을 조금 더 두껍게 해야 눈에 잘 보임
+    if mpx > 4:
+        thickness = 1
+    elif mpx > 1:
+        thickness = 1
+    else:
+        thickness = 1
+
+    # ── contrast (addWeighted alpha) ───────────────────────
+    # 대비가 낮으면 contrast를 높게
+    if std < 40:
+        contrast = 1.8
+    elif std < 50:
+        contrast = 1.0   # 최종값 반영 (std=41.1)
+    elif std < 65:
+        contrast = 0.8   # 최종값 반영 (std=56~60)
+    elif std < 70:
+        contrast = 1.5   # 최종값 반영 (std=60.2→1.4, std=65.2→1.5 평균)
+    else:
+        contrast = 1.7   # 최종값 반영 (std=73.2)
+
+    # ── brightness (addWeighted beta) ──────────────────────
+    # 어두운 이미지 → 밝게(+), 밝은 이미지 → 어둡게(-)
+    if mean < 80:
+        brightness = -21   # 최종값 반영 (mean=55.7)
+    elif mean < 100:
+        brightness = 10    # 최종값 반영 (mean=88.1)
+    elif mean < 112:
+        brightness = -97   # 최종값 반영 (mean=111.4)
+    elif mean < 115:
+        brightness = -48   # 최종값 반영 (mean=112.5)
+    elif mean < 126:
+        brightness = -38   # 최종값 반영 (mean=124.9)
+    elif mean < 130:
+        brightness = -54   # 최종값 반영 (mean=127.1)
+    else:
+        brightness = -111  # 평균값 반영 (mean=142.3→-102, mean=141.0→-120)
+
+    return center, neighbor, thickness, contrast, brightness
+
+
 def cartoonize_image(img_path):
     # 1. 이미지 불러오기
     img = cv.imread(img_path)
     if img is None:
         print("이미지를 찾을 수 없습니다.")
         return
+
+    # 이미지 분석 → 추천 초기값 계산
+    init_center, init_neighbor, init_thickness, init_contrast, init_brightness = analyze_image(img)
 
     # =========================================
     # Step 1: 스케치 선(Edge) 추출하기
@@ -21,7 +94,7 @@ def cartoonize_image(img_path):
     )
 
     # =========================================
-    # Step 2: Sharpening Filter - 트랙바로 실시간 조정
+    # Step 2: Sharpening Filter
     # =========================================
     # 커널 구조:
     #   [  0,  -nb,   0 ]
@@ -30,88 +103,40 @@ def cartoonize_image(img_path):
     # ct  = 중앙값 (center)  : 클수록 원본 강조
     # nb  = 주변값 (neighbor): 클수록 엣지 강조
 
-    WINDOW = "Cartoon Style (trackbar로 조정)"
-    cv.namedWindow(WINDOW)
+    ct         = init_center
+    nb         = init_neighbor
+    thickness  = init_thickness
+    contrast   = init_contrast
+    brightness = init_brightness
 
-    # 트랙바 초기값 (정수만 가능하므로 실제값 = 트랙바값 / 10)
-    # center: 1~200 → 실제 0.1~20.0  (초기 50 → 5.0)
-    # neighbor: 0~100 → 실제 0.0~10.0 (초기 10 → 1.0)
-    # edge thickness: 0~20 → dilate 반복 횟수 (0 = 원본, 1픽셀씩 증가)
-    # contrast x0.1: 1~30 → 실제 0.1~3.0  (초기 15 → 1.5)
-    # brightness: -150~150 → addWeighted beta값 (초기 -110)
-    cv.createTrackbar("center x0.1",    WINDOW,  50, 200, lambda x: None)
-    cv.createTrackbar("neighbor x0.1",  WINDOW,  10, 100, lambda x: None)
-    cv.createTrackbar("edge thickness", WINDOW,   0,  20, lambda x: None)
-    cv.createTrackbar("contrast x0.1", WINDOW,  15,  30, lambda x: None)
-    cv.createTrackbar("brightness+150", WINDOW,  40, 300, lambda x: None)  # 실제값 = 트랙바값 - 150
+    # thickness=0이면 원본 edges 그대로, 1 이상이면 1픽셀 커널로 반복 침식
+    if thickness == 0:
+        thick_edges = edges
+    else:
+        kernel      = np.ones((3, 3), np.uint8)
+        thick_edges = cv.erode(edges, kernel, iterations=thickness)
 
-    print("=== Cartoon Filter 실시간 조정 ===")
-    print("  center      트랙바: 샤프닝 중앙값")
-    print("  neighbor    트랙바: 샤프닝 주변값 (엣지 강도)")
-    print("  edge thickness   : 선 두께 0~20")
-    print("  contrast    트랙바: 색상 대비 (x0.1)")
-    print("  brightness  트랙바: 밝기 (-150~+150)")
-    print("  ESC: 종료 (현재 값 터미널에 출력)")
-    print("===================================")
+    sharpening_kernel = np.array([
+        [  0, -nb,   0],
+        [-nb,  ct, -nb],
+        [  0, -nb,   0]
+    ], dtype=np.float32)
 
-    while True:
-        ct         = cv.getTrackbarPos("center x0.1",    WINDOW) / 10.0
-        nb         = cv.getTrackbarPos("neighbor x0.1",  WINDOW) / 10.0
-        thickness  = cv.getTrackbarPos("edge thickness", WINDOW)
-        contrast   = cv.getTrackbarPos("contrast x0.1", WINDOW) / 10.0
-        brightness = cv.getTrackbarPos("brightness+150", WINDOW) - 150
+    # =========================================
+    # Step 3: 선과 색상 합성하기
+    # =========================================
+    color   = cv.filter2D(img, -1, sharpening_kernel)
+    cartoon = cv.bitwise_and(color, color, mask=thick_edges)
+    cartoon = cv.addWeighted(cartoon, contrast, np.zeros(cartoon.shape, cartoon.dtype), 1, brightness)
 
-        ct       = max(ct, 0.1)
-        contrast = max(contrast, 0.1)
-
-        # thickness=0이면 원본 edges 그대로, 1 이상이면 1픽셀 커널로 반복 침식
-        if thickness == 0:
-            thick_edges = edges
-        else:
-            kernel      = np.ones((3, 3), np.uint8)
-            thick_edges = cv.erode(edges, kernel, iterations=thickness)
-
-        sharpening_kernel = np.array([
-            [  0, -nb,   0],
-            [-nb,  ct, -nb],
-            [  0, -nb,   0]
-        ], dtype=np.float32)
-
-        # =========================================
-        # Step 3: 선과 색상 합성하기
-        # =========================================
-        color   = cv.filter2D(img, -1, sharpening_kernel)
-        cartoon = cv.bitwise_and(color, color, mask=thick_edges)
-        cartoon = cv.addWeighted(cartoon, contrast, np.zeros(cartoon.shape, cartoon.dtype), 1, brightness)
-
-        # 현재 값을 이미지에 표시
-        info = cartoon.copy()
-        cv.putText(info, f"center={ct:.1f}  neighbor={nb:.1f}  edge={thickness}",
-                   (10, 30), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        cv.putText(info, f"contrast={contrast:.1f}  brightness={brightness}",
-                   (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        cv.putText(info, "ESC: quit & print values",
-                   (10, 90), cv.FONT_HERSHEY_SIMPLEX, 0.55, (200, 0, 200), 1)
-
-        cv.imshow("Original Image", img)
-        cv.imshow(WINDOW, info)
-
-        key = cv.waitKey(30) & 0xFF
-        if key == 27:  # ESC → 종료 및 현재 값 출력
-            print("\n=== 최종 설정값 ===")
-            print(f"  center     = {ct:.1f}")
-            print(f"  neighbor   = {nb:.1f}")
-            print(f"  thickness  = {thickness}")
-            print(f"  contrast   = {contrast:.1f}")
-            print(f"  brightness = {brightness}")
-            print("==================")
-            break
-
+    cv.imshow("Original Image", img)
+    cv.imshow("Cartoon Style", cartoon)
+    cv.waitKey(0)
     cv.destroyAllWindows()
 
 # 실행 예시 (본인의 이미지 파일 경로로 변경하세요)
 try:
-    cartoonize_image('./image/image.jpeg')
+    cartoonize_image('./image/1.jpeg')
 except KeyboardInterrupt:
     print("\n프로그램을 종료합니다.")
     cv.destroyAllWindows()
