@@ -11,6 +11,10 @@ def analyze_image(img):
     std   = float(np.std(gray))
     mpx   = (h * w) / 1_000_000
 
+    print(f"  해상도    : {w}x{h} ({mpx:.1f} MP)")
+    print(f"  평균 밝기 : {mean:.1f}")
+    print(f"  대비(std) : {std:.1f}")
+
     # ── center (샤프닝 중앙값) ──────────────────────────────
     # 대비가 낮으면 샤프닝을 강하게(center 크게), 높으면 약하게
     if std < 40:
@@ -66,7 +70,7 @@ def analyze_image(img):
     elif mean < 130:
         brightness = -54   # 최종값 반영 (mean=127.1)
     else:
-        brightness = -111  # 평균값 반영 (mean=142.3→-102, mean=141.0→-120)
+        brightness = -50   # 7번 이미지(mean=142.3) 밝기 개선 반영
 
     return center, neighbor, thickness, contrast, brightness
 
@@ -136,7 +140,12 @@ def cartoonize_image(img_path):
 
 # 실행 예시 (본인의 이미지 파일 경로로 변경하세요)
 try:
-    cartoonize_image('./image/10.jpeg')
+    for i in range(1, 11):
+        path = f'./image/{i}.jpeg'
+        print(f"\n{'='*40}")
+        print(f"  [{i}/10] {path}")
+        print(f"{'='*40}")
+        cartoonize_image(path)
 except KeyboardInterrupt:
     print("\n프로그램을 종료합니다.")
     cv.destroyAllWindows()
