@@ -143,18 +143,7 @@ def cartoonize_image(img_path):
 
 # 실행 예시 (본인의 이미지 파일 경로로 변경하세요)
 try:
-    for i in range(1, 11):
-        path = f'./image/{i}.jpeg'
-        print(f"\n{'='*40}")
-        print(f"  [{i}/10] {path}")
-        print(f"{'='*40}")
-        result = cartoonize_image(path)
-
-        # 5번, 10번 이미지는 결과를 파일로 저장
-        if i in (5, 10):
-            save_path = f'./image/{i}_cartoon.jpeg'
-            cv.imwrite(save_path, result)
-            print(f"  → 저장 완료: {save_path}")
+    cartoonize_image('./image/10.jpeg')
 
 except KeyboardInterrupt:
     print("\n프로그램을 종료합니다.")
