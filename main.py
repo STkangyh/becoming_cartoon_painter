@@ -138,6 +138,9 @@ def cartoonize_image(img_path):
     cv.waitKey(0)
     cv.destroyAllWindows()
 
+    return cartoon
+
+
 # 실행 예시 (본인의 이미지 파일 경로로 변경하세요)
 try:
     for i in range(1, 11):
@@ -145,7 +148,14 @@ try:
         print(f"\n{'='*40}")
         print(f"  [{i}/10] {path}")
         print(f"{'='*40}")
-        cartoonize_image(path)
+        result = cartoonize_image(path)
+
+        # 5번, 10번 이미지는 결과를 파일로 저장
+        if i in (5, 10):
+            save_path = f'./image/{i}_cartoon.jpeg'
+            cv.imwrite(save_path, result)
+            print(f"  → 저장 완료: {save_path}")
+
 except KeyboardInterrupt:
     print("\n프로그램을 종료합니다.")
     cv.destroyAllWindows()
