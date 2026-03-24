@@ -33,6 +33,10 @@ pip install opencv-python numpy
 ```bash
 python3 main.py
 ```
+혹은
+```
+python main.py
+```
 
 `main.py` 하단의 이미지 경로를 변환할 파일로 수정하세요.
 
