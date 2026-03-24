@@ -136,7 +136,7 @@ def cartoonize_image(img_path):
 
 # 실행 예시 (본인의 이미지 파일 경로로 변경하세요)
 try:
-    cartoonize_image('./image/1.jpeg')
+    cartoonize_image('./image/10.jpeg')
 except KeyboardInterrupt:
     print("\n프로그램을 종료합니다.")
     cv.destroyAllWindows()
